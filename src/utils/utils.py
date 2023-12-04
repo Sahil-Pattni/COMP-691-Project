@@ -51,3 +51,22 @@ def get_dataset_filepaths(jupyter_prefix: bool = True) -> List[str]:
 
 def get_prefix(flag: bool):
     return "../" if flag else ""
+
+
+def common_columns(
+    df1: pd.DataFrame, df2: pd.DataFrame, columns: List[str] = []
+) -> List[str]:
+    """
+    Get common columns between two DataFrames.
+
+    Args:
+        df1 (pd.DataFrame): First DataFrame.
+        df2 (pd.DataFrame): Second DataFrame.
+        columns (List[str], optional): List of columns to check.
+        Defaults to an empty list.
+
+    Returns:
+        List[str]: List of common columns.
+    """
+    columns = columns if columns else df1.columns.to_list()
+    return [col for col in columns if col in df1.columns and col in df2.columns]
