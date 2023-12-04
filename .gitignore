@@ -4,3 +4,9 @@ __pycache__/
 
 # Special files
 testbed.py
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
