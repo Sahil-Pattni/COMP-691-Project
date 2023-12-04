@@ -11,27 +11,13 @@ Copyright (c) Sahil Pattni
 
 from typing import List
 import pandas as pd
-import logging
+
 import re
 import os
 
-import warnings
+from utils.logger_config import setup_logger
 
-warnings.filterwarnings("ignore")
-
-# Create a logger object
-logger = logging.getLogger("my_logger")
-logger.setLevel(logging.INFO)
-# Create a handler (e.g., console handler)
-handler = logging.StreamHandler()
-# Define a custom format without a prefix
-formatter = logging.Formatter("%(message)s")
-# Set the formatter for the handler
-handler.setFormatter(formatter)
-# Add the handler to the logger
-logger.addHandler(handler)
-# Prevent the logger from propagating messages to the root logger
-logger.propagate = False
+logger = setup_logger(__name__)
 
 
 class Sessions:
@@ -133,6 +119,9 @@ class Sessions:
 
         base_regex: str = r"_.+.csv"
         for file in files:
+            # Has to be a CSV file
+            if not file.endswith(".csv"):
+                continue
             if re.search(f"client_buffer{base_regex}", file):
                 results["client_buffer"] = os.path.join(directory, file)
                 logger.info(f"Found client buffer file: {file}")
@@ -235,12 +224,5 @@ class Sessions:
 
         return df
 
-
-# ----- MAIN ----- #
-# if __name__ == "__main__":
-# Suppress warnings
-
-# Create a Puffer sessions object
-s = Sessions("../../data/Puffer/fake_data/")
 
 # %%

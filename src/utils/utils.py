@@ -13,7 +13,7 @@ import re
 import pickle
 import pandas as pd
 
-from scapy.all import TCP, UDP, PacketList
+from scapy.all import PacketList
 from typing import List
 from tqdm import tqdm
 
@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.ERROR)
 warnings.filterwarnings("ignore")
 
 
-DATA_PATH: str = "data/"
+DATA_PATH: str = "data/Puffer/fake_data/"
 # -------------------------- #
 
 
@@ -45,9 +45,9 @@ def get_dataset_filepaths(jupyter_prefix: bool = True) -> List[str]:
         List[str]: List of file paths
     """
 
-    prefix: str = __get_prefix(jupyter_prefix)
+    prefix: str = get_prefix(jupyter_prefix)
     return [f"{prefix}{file}" for file in os.listdir(prefix) if file.endswith(".pcap")]
 
 
-def __get_prefix(flag: bool):
-    return f"../{DATA_PATH}" if flag else DATA_PATH
+def get_prefix(flag: bool):
+    return "../" if flag else ""
