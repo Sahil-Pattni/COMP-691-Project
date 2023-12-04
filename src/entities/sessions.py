@@ -8,16 +8,16 @@ Author: Sahil Pattni
 
 Copyright (c) Sahil Pattni
 """
-
+import logging
 from typing import List
 import pandas as pd
 
 import re
 import os
 
-from utils.logger_config import setup_logger
+from utils.logger_config import LoggerCustom
 
-logger = setup_logger(__name__)
+logger = LoggerCustom.get_logger("Sessions", level=logging.DEBUG)
 
 
 class Sessions:
@@ -65,7 +65,7 @@ class Sessions:
         "delivery_rate",
     ]
 
-    def __init__(self, directory: str):
+    def __init__(self, directory: str, **kwargs):
         """
         Initialize a Puffer session.
 
@@ -74,7 +74,7 @@ class Sessions:
             data from.
         """
         self.__files: dict = self.__find_files(directory)
-        self.__load()
+        self.__load(**kwargs)
 
     # ----- PUBLIC METHODS ----- #
     # Getters
@@ -98,9 +98,44 @@ class Sessions:
     def ssim(self) -> pd.DataFrame:
         return self.__ssim
 
+    def get_all_data(self, index: int = None) -> List:  # type: ignore
+        """
+        Get all Puffer sessions data, or the data at a specific index.
+        The order of the data is as follows:
+            0. Client buffer
+            1. Video acked
+            2. Video sent
+            3. Video size
+            4. SSIM
+
+        Args:
+            index (int, optional): Index of the data to return. Defaults to None.
+
+        Returns:
+            List: List of Puffer sessions' data.
+
+        Raises:
+            ValueError: If the index is invalid.
+        """
+        data_mapping = {
+            0: self.__client_buffer,
+            1: self.__video_acked,
+            2: self.__video_sent,
+            3: self.__video_size,
+            4: self.__ssim,
+        }
+
+        if index is None:
+            return [data_mapping[i] for i in range(len(data_mapping))]
+        else:
+            if index not in data_mapping.keys():
+                raise ValueError(f"Invalid index: {index}")
+            return [data_mapping[index]]
+
     # ----- PRIVATE METHODS ----- #
     def __find_files(self, directory: str) -> dict:
         """
+
         Finds the CSV filepaths in a directory for the following datasets:
             - Client buffer
             - Video acked
@@ -124,39 +159,89 @@ class Sessions:
                 continue
             if re.search(f"client_buffer{base_regex}", file):
                 results["client_buffer"] = os.path.join(directory, file)
-                logger.info(f"Found client buffer file: {file}")
+                logger.debug(f"Found client buffer file: {file}")
             elif re.search(f"video_acked{base_regex}", file):
                 results["video_acked"] = os.path.join(directory, file)
-                logger.info(f"Found video acked file: {file}")
+                logger.debug(f"Found video acked file: {file}")
             elif re.search(f"video_sent{base_regex}", file):
                 results["video_sent"] = os.path.join(directory, file)
-                logger.info(f"Found video sent file: {file}")
+                logger.debug(f"Found video sent file: {file}")
             elif re.search(f"video_size{base_regex}", file):
                 results["video_size"] = os.path.join(directory, file)
-                logger.info(f"Found video size file: {file}")
+                logger.debug(f"Found video size file: {file}")
             elif re.search(f"ssim{base_regex}", file):
                 results["ssim"] = os.path.join(directory, file)
-                logger.info(f"Found SSIM file: {file}")
+                logger.debug(f"Found SSIM file: {file}")
 
         return results
 
-    def __load(self) -> None:
+    def __load(self, **kwargs) -> None:  # type: ignore
         """
         Load a Puffer sessions dataset from a CSV file.
+
+        Args:
+            limit (int, optional): Limit the number of rows to load. Defaults to None.
 
         Returns:
             pd.DataFrame: Pandas DataFrame containing Puffer sessions data.
         """
         # Burn last
-        self.__df = pd.DataFrame()
+        self.__client_buffer: pd.DataFrame = self.__load_client_buffer(**kwargs)
+        self.__video_acked: pd.DataFrame = self.__load_video_acked(**kwargs)
+        self.__video_sent: pd.DataFrame = self.__load_video_sent(**kwargs)
+        self.__video_size: pd.DataFrame = self.__load_video_size(**kwargs)
+        self.__ssim: pd.DataFrame = self.__load_ssim(**kwargs)
+        pass
 
-        self.__client_buffer: pd.DataFrame = self.load_client_buffer()
-        self.__video_acked: pd.DataFrame = self.load_video_acked()
-        self.__video_sent: pd.DataFrame = self.load_video_sent()
-        self.__video_size: pd.DataFrame = self.load_video_size()
-        self.__ssim: pd.DataFrame = self.load_ssim()
+    def __cleanup(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Clean up a Puffer sessions dataset.
+        Steps:
+            1. Remove rows with null values from a Pandas DataFrame.
+            2. Sort the DataFrame by time_ns_gmt and then by session_id.
+            3. Convert time_ns_gmt to a datetime object.
+            3. Resamples the DataFrame into 1S intervals.
 
-    def load_client_buffer(self) -> pd.DataFrame:
+
+        Args:
+            df (pd.DataFrame): Pandas DataFrame to clean up.
+
+        Returns:
+            pd.DataFrame: Cleaned up Pandas DataFrame.
+        """
+        # Step 1 : Remove rows with null values
+        old_rows: int = df.shape[0]
+        df = df.dropna()
+        logger.debug(f"Removed {old_rows - df.shape[0]} rows with null values.")
+
+        # Step 2 : Sort the DataFrame by time_ns_gmt and then by session_id
+        columns = [
+            column for column in ["time_ns_gmt", "session_id"] if column in df.columns
+        ]
+        logger.debug(f"Sorting DataFrame by columns: {columns}")
+        df = df.sort_values(by=columns)
+
+        # Step 3 : Convert time_ns_gmt to a datetime object
+        if "time_ns_gmt" in df.columns:
+            df["time_ns_gmt"] = pd.to_datetime(df["time_ns_gmt"])
+
+        # Step 4 : Resample the DataFrame into 1S intervals
+        df = (
+            df.resample(on="time_ns_gmt", rule="1S")
+            .max()
+            .dropna()
+            .sort_values(
+                by=[
+                    col
+                    for col in ["time_ns_gmt", "session_id", "index"]
+                    if col in df.columns
+                ]
+            )
+        )
+
+        return df
+
+    def __load_client_buffer(self, **kwargs) -> pd.DataFrame:
         """
         Load a Puffer client buffer dataset from a CSV file.
 
@@ -164,9 +249,9 @@ class Sessions:
             pd.DataFrame: Pandas DataFrame containing Puffer client buffer data.
         """
 
-        return self.__read_csv(self.__files["client_buffer"])
+        return self.__read_csv(self.__files["client_buffer"], **kwargs)
 
-    def load_video_acked(self) -> pd.DataFrame:
+    def __load_video_acked(self, **kwargs) -> pd.DataFrame:
         """
         Load a Puffer video acked dataset from a CSV file.
 
@@ -174,9 +259,9 @@ class Sessions:
             pd.DataFrame: Pandas DataFrame containing Puffer video acked data.
         """
 
-        return self.__read_csv(self.__files["video_acked"])
+        return self.__read_csv(self.__files["video_acked"], **kwargs)
 
-    def load_video_sent(self) -> pd.DataFrame:
+    def __load_video_sent(self, **kwargs) -> pd.DataFrame:
         """
         Load a Puffer video sent dataset from a CSV file.
 
@@ -184,18 +269,18 @@ class Sessions:
             pd.DataFrame: Pandas DataFrame containing Puffer video sent data.
         """
 
-        return self.__read_csv(self.__files["video_sent"])
+        return self.__read_csv(self.__files["video_sent"], **kwargs)
 
-    def load_video_size(self) -> pd.DataFrame:
+    def __load_video_size(self, **kwargs) -> pd.DataFrame:
         """
         Load a Puffer video size dataset from a CSV file.
 
         Returns:
             pd.DataFrame: Pandas DataFrame containing Puffer video size data.
         """
-        return self.__read_csv(self.__files["video_size"])
+        return self.__read_csv(self.__files["video_size"], **kwargs)
 
-    def load_ssim(self) -> pd.DataFrame:
+    def __load_ssim(self, **kwargs) -> pd.DataFrame:
         """
         Load a Puffer SSIM dataset from a CSV file.
 
@@ -206,9 +291,9 @@ class Sessions:
             pd.DataFrame: Pandas DataFrame containing Puffer SSIM data.
         """
 
-        return self.__read_csv(self.__files["ssim"])
+        return self.__read_csv(self.__files["ssim"], **kwargs)
 
-    def __read_csv(self, filepath: str) -> pd.DataFrame:
+    def __read_csv(self, filepath: str, **kwargs) -> pd.DataFrame:
         """
         Read a CSV file into a Pandas DataFrame.
 
@@ -220,9 +305,11 @@ class Sessions:
         """
 
         # Replace time (ns GMT) with 'time_ns_gmt' if present
-        df = pd.read_csv(filepath).rename(columns={"time (ns GMT)": "time_ns_gmt"})
+        df = pd.read_csv(filepath, **kwargs).rename(
+            columns={"time (ns GMT)": "time_ns_gmt"}
+        )
 
-        return df
+        return self.__cleanup(df)
 
 
 # %%
