@@ -9,6 +9,17 @@ import pyarrow.feather as ftr
 
 
 def compile_data(filepaths: List[str], limit: int = None) -> dict:
+    """
+    Compile data from a list of filepaths into a dictionary of datasets.
+
+    Args:
+        filepaths (List[str]): List of filepaths to compile data from
+        limit (int, optional): Limit the number of files to compile. Defaults to None.
+
+    Returns:
+        dict: Dictionary of datasets.
+    """
+
     results: dict = {}
 
     iterations: int = 0
