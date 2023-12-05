@@ -15,17 +15,19 @@ import pandas as pd
 import re
 import os
 
-from utils.logger_config import LoggerCustom
+import utils.logger_config
+
+from src.utils.logger_config import LoggerCustom
 
 logger = LoggerCustom.get_logger("Sessions", level=logging.DEBUG)
 
 
 class Sessions:
     # Attributes of a Puffer session.
-    attributes = [
+    attributes = {
         # Unique identifier for each video session, used to track and analyze individual
         # streaming experiences.
-        "session_id",
+        "session_id"
         # Identifier for the specific pair of Adaptive Bitrate (ABR) and congestion
         # control algorithms used in the session.
         "expt_id",
@@ -63,7 +65,7 @@ class Sessions:
         # Estimated rate of data delivery in bytes/second, a critical metric for
         # understanding network throughput.
         "delivery_rate",
-    ]
+    }
 
     def __init__(self, directory: str, **kwargs):
         """
@@ -97,6 +99,27 @@ class Sessions:
     @property
     def ssim(self) -> pd.DataFrame:
         return self.__ssim
+
+    # Setters
+    @client_buffer.setter
+    def client_buffer(self, client_buffer: pd.DataFrame):
+        self.__client_buffer = client_buffer
+
+    @video_acked.setter
+    def video_acked(self, video_acked: pd.DataFrame):
+        self.__video_acked = video_acked
+
+    @video_sent.setter
+    def video_sent(self, video_sent: pd.DataFrame):
+        self.__video_sent = video_sent
+
+    @video_size.setter
+    def video_size(self, video_size: pd.DataFrame):
+        self.__video_size = video_size
+
+    @ssim.setter
+    def ssim(self, ssim: pd.DataFrame):
+        self.__ssim = ssim
 
     def get_all_data(self, index: int = None) -> List:  # type: ignore
         """
@@ -195,11 +218,11 @@ class Sessions:
 
     def __cleanup(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Clean up a Puffer sessions dataset.
+        Clean up a Puffer session's dataset.
         Steps:
             1. Remove rows with null values from a Pandas DataFrame.
             2. Sort the DataFrame by time_ns_gmt and then by session_id.
-            3. Convert time_ns_gmt to a datetime object.
+            3. Convert time data to datetime objects.
             3. Resamples the DataFrame into 1S intervals.
 
 
@@ -221,9 +244,10 @@ class Sessions:
         logger.debug(f"Sorting DataFrame by columns: {columns}")
         df = df.sort_values(by=columns)
 
-        # Step 3 : Convert time_ns_gmt to a datetime object
-        if "time_ns_gmt" in df.columns:
-            df["time_ns_gmt"] = pd.to_datetime(df["time_ns_gmt"])
+        # Step 3 : Convert datetime objects
+        for _col in ["time_ns_gmt"]:
+            if _col in df.columns:
+                df[_col] = pd.to_datetime(df[_col])
 
         # Step 4 : Resample the DataFrame into 1S intervals
         df = (
