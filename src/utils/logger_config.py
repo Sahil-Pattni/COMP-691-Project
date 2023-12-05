@@ -57,3 +57,7 @@ class LoggerCustom:
             logger.addHandler(ch)
 
         return logger
+
+
+# Runs at import time
+logger = LoggerCustom.get_logger("Logger", level=logging.INFO)

@@ -9,13 +9,8 @@ Copyright (c) Sahil Pattni
 
 # ------- IMPORTS, GLOBALS & OTHER SETUP ---------- #
 import os
-import re
-import pickle
 import pandas as pd
-
-from scapy.all import PacketList
 from typing import List
-from tqdm import tqdm
 
 # Suppress warnings
 import warnings

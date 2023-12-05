@@ -4,6 +4,7 @@ __pycache__/
 
 # Special files
 testbed.py
+out/
 
 # PyCharm
 .idea/
