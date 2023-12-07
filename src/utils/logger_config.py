@@ -19,6 +19,8 @@ class LoggerCustom:
         """
         if LoggerCustom.logger is None:
             LoggerCustom.logger = LoggerCustom.__setup_logger(name, level)
+        else:
+            LoggerCustom.logger.setLevel(level)
         return LoggerCustom.logger
 
     @staticmethod
