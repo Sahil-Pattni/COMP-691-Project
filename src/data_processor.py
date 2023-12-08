@@ -60,7 +60,7 @@ class DataProcessor:
         num_chunks_processed: int = 0
         processed_files = set()
         for root, dirs, files in os.walk(input_directory):
-            for file in files:
+            for idx, file in enumerate(files):
                 # Skip if the file has already been processed
                 if file in self.__processed_files:
                     logger.debug(f"Skipping file: {file}")
@@ -86,17 +86,19 @@ class DataProcessor:
                         self.__chunk_number += 1
 
                     # If the number of chunks processed is reached, stop
-                    if num_chunks_processed >= n_chunks:
+                    if num_chunks_processed >= n_chunks or idx == len(files) - 1:
                         logger.info(
                             f"Processed {num_chunks_processed:,} chunks. Stopping..."
                         )
+                        if chunk_df is not None:
+                            self.__save(chunk_df, processed_files, output_directory)
                         break
 
                 except ValueError as e:
                     logger.error(f"Error while processing file: {file}, error: {e}")
 
     def __save(self, chunk_df, files_processed, output_directory):
-        logger.debug(f"Chunk size reached, saving chunk #{self.__chunk_number:,}")
+        logger.debug(f"Saving chunk #{self.__chunk_number:,}")
 
         self.__processed_files = self.__processed_files.union(files_processed)
         # Save the processed files
