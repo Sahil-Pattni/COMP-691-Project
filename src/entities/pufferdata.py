@@ -19,7 +19,7 @@ import os
 
 from src.utils.logger_config import LoggerCustom
 
-logger = LoggerCustom.get_logger("PufferData")
+logger = LoggerCustom.get_logger()
 
 
 class PufferData:

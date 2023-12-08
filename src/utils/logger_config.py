@@ -13,12 +13,12 @@ class LoggerCustom:
     logger = None
 
     @staticmethod
-    def get_logger(name, level=logging.INFO):
+    def get_logger(level=logging.INFO):
         """
         Return the logger object.
         """
         if LoggerCustom.logger is None:
-            LoggerCustom.logger = LoggerCustom.__setup_logger(name, level)
+            LoggerCustom.logger = LoggerCustom.__setup_logger("Logger", level)
         else:
             LoggerCustom.logger.setLevel(level)
         return LoggerCustom.logger
@@ -62,4 +62,4 @@ class LoggerCustom:
 
 
 # Runs at import time
-logger = LoggerCustom.get_logger("Logger", level=logging.INFO)
+logger = LoggerCustom.get_logger(level=logging.INFO)
