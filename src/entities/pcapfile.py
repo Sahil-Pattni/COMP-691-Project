@@ -1,5 +1,6 @@
 #  Author: Sahil Pattni
 #  Copyright (c) Sahil Pattni 2023
+import hashlib
 import re
 import os
 from typing import List
@@ -74,31 +75,21 @@ class PcapFile:
 
         for packet in packets:
             if IP in packet:
-                src = packet[IP].src
-                dst = packet[IP].dst
-                proto = packet[IP].proto
-                size = packet[IP].len
-                time = packet.time
-
-                if TCP in packet:
-                    s_port = packet[TCP].sport
-                    d_port = packet[TCP].dport
-                elif UDP in packet:
-                    s_port = packet[UDP].sport
-                    d_port = packet[UDP].dport
-                else:
-                    s_port = 0
-                    d_port = 0
+                comm_protocol = TCP if TCP in packet else UDP if UDP in packet else None
                 data.append(
                     {
-                        "src": src,
-                        "dst": dst,
-                        "dst_port": d_port,
-                        "src_port": s_port,
-                        "proto": proto,
-                        "size": size,
-                        "time": time,
-                        "provider": self.__domain_name,
+                        "src": packet[IP].src,
+                        "dst": packet[IP].dst,
+                        "src_port": packet[comm_protocol].sport
+                        if comm_protocol
+                        else None,
+                        "dst_port": packet[comm_protocol].dport
+                        if comm_protocol
+                        else None,
+                        "proto": packet[IP].proto,
+                        "size": packet[IP].len,
+                        "time": packet[IP].time,
+                        "provider": hash(self.__domain_name),
                         "tcp": 1 if TCP in packet else 0,
                         "udp": 1 if UDP in packet else 0,
                         "payload_size": len(packet.payload),
@@ -107,13 +98,33 @@ class PcapFile:
                 )
 
         df = pd.DataFrame(data)
-        self.__preprocess(df)
+        df = self.__preprocess(df)
         return df
 
-    def __preprocess(self, df: pd.DataFrame):
+    def __preprocess(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Preprocess the data.
+        Args:
+            df: The dataframe to preprocess.
+
+        Returns:
+            pd.DataFrame: The preprocessed dataframe.
+        """
         # Convert 'time' column to float before converting to datetime
         df["time"] = pd.to_numeric(df["time"], errors="coerce")
         df["time"] = pd.to_datetime(df["time"], unit="s")
+        df["tcp"] = df["tcp"].astype("uint8")
+        df["udp"] = df["udp"].astype("uint8")
+        # Apply the function to each row in the DataFrame to create a new 'session_uid' column
+        df["session_uid"] = df.apply(self.__create_session_uid_hash, axis=1)
+
+        return df
+
+    def __create_session_uid_hash(self, row):
+        # Create a concatenated string of the relevant columns
+        combined_string = f"{row['src']}{row['dst']}{row['src_port']}{row['dst_port']}{row['provider']}"
+        # Create a hash of this string
+        return hashlib.md5(combined_string.encode()).hexdigest()
 
     def __extract_filename_details(self, root: str, filename: str):
         """
@@ -133,8 +144,6 @@ class PcapFile:
         self.__subdomain = match_groups.group(1)
         self.__domain_name = match_groups.group(2)
         self.__top_level_domain = match_groups.group(3)
-        # self.__unknown = match_groups.group(4)
-        # self.__address = match_groups.group(5)
 
     @staticmethod
     def is_pcap_file(self, filename: str) -> bool:
