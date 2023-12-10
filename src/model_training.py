@@ -1,5 +1,7 @@
 #  Author: Sahil Pattni
 #  Copyright (c) Sahil Pattni 2023
+import os
+from typing import List
 
 import pandas as pd
 import hashlib
@@ -17,13 +19,18 @@ from entities.pcapfile import PcapFile
 from utils.logger_config import LoggerCustom
 from QoEGuesser import QoEPredictor
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.preprocessing import StandardScaler
 import seaborn as sns
 
 
 logger = LoggerCustom.get_logger(level="DEBUG")
 
 
-def load_chunks(current_chunk: int, window_size: int):
+def load_chunks(
+    current_chunk: int,
+    window_size: int,
+    output_directory: str = "../out/processed_chunks",
+):
     """
     Load the data.
     Args:
@@ -34,19 +41,26 @@ def load_chunks(current_chunk: int, window_size: int):
         df: The dataframe containing the loaded chunks.
     """
     df = None
-    for i in range(current_chunk, current_chunk + window_size):
+    counter: int = 0
+    for _ in range(current_chunk, current_chunk + window_size):
+        file_path = f"{output_directory}/chunk_{current_chunk}.ftr"
         try:
             if df is None:
-                df = pd.read_feather(f"../out/chunk_{current_chunk}.ftr")
+                df = pd.read_feather(file_path)
             else:
                 df = pd.concat(
-                    [df, pd.read_feather(f"../out/chunk_{current_chunk}.ftr")]
+                    [
+                        df,
+                        pd.read_feather(
+                            file_path,
+                        ),
+                    ]
                 )
-            current_chunk += 1
+            counter += 1
         except FileNotFoundError:
-            logger.debug(f"Chunk {current_chunk:,} not found.")
+            logger.debug(f"File `{file_path}` not found.")
             break
-    return df, i
+    return df, counter
 
 
 def __categorize_bitrate(bitrate: float):
@@ -63,7 +77,7 @@ def __categorize_bitrate(bitrate: float):
         return 3  # "ULTRA_QUALITY"
 
 
-def __preprocess(df: pd.DataFrame):
+def preprocess(df: pd.DataFrame, scaler):
     """
     Preprocess the data.
     Args:
@@ -74,13 +88,13 @@ def __preprocess(df: pd.DataFrame):
         y: The labels.
     """
     df.sort_values(by="time", inplace=True)
-    df.reset_index(drop=True, inplace=True)
+    # df.reset_index(drop=True, inplace=True)
 
     # Derive session-level features
     df["inter_arrival_time"] = (
         df.groupby("session_uid")["time"].diff().dt.total_seconds()
     )
-    df.dropna(inplace=True)
+    # df.dropna(inplace=True)
     jitter_per_session = df.groupby("session_uid")["inter_arrival_time"].std()
     df["jitter"] = df["session_uid"].map(jitter_per_session)
     df.reset_index(drop=True, inplace=True)
@@ -124,6 +138,7 @@ def __preprocess(df: pd.DataFrame):
     logger.debug("Completed preprocessing.")
 
     _old_nrows = df.shape[0]
+
     # Filter down video-only data
     lower_limit = 400 * 1000  # in kbps
     df = df[(df["bitrate"] >= lower_limit)]
@@ -138,88 +153,80 @@ def __preprocess(df: pd.DataFrame):
     # Segment by session_uid
     grouped = df.groupby("session_uid")
     sessions = []
+    columns: List[str] = None
     for name, group in grouped:
-        features = group.drop(columns=["bitrate", "session_uid"]).values
+        filtered_group = group.drop(columns=["bitrate", "session_uid"])
+        features = filtered_group.values
+        if columns is None:
+            columns = filtered_group.columns
         labels = group["bitrate"].values
+
+        # If scaler has not been fit yet
+        if not (hasattr(scaler, "mean_") and hasattr(scaler, "var_")):
+            scaler.fit(features)
+
         sessions.append(
             (
-                torch.tensor(features, dtype=torch.float32),
+                torch.tensor(scaler.transform(features), dtype=torch.float32),
                 torch.tensor(labels, dtype=torch.long),
             )
         )
 
-    return sessions
+    return sessions, columns
 
 
-if __name__ == "__main__":
-    logger = LoggerCustom.get_logger(level="DEBUG")
+def train_model(
+    model: nn.Module,
+    loss_function: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    sessions: List[tuple],
+    num_epochs: int,
+) -> List[float]:
+    """
+    Train the model.
+    Args:
+        model (nn.Module): The model to train.
+        loss_function (nn.Module): The loss function.
+        optimizer (torch.optim.Optimizer): The optimizer.
+        sessions (List[tuple]): The list of sessions to train on.
+        num_epochs (int): The number of epochs to train for.
+    """
+    losses = []
+    with trange(num_epochs, desc="Epochs", disable=False) as epochs:
+        for _ in epochs:
+            for features, labels in sessions:
+                optimizer.zero_grad()
+                model.hidden_cell = (
+                    torch.zeros(1, 1, model.hidden_layer_size),
+                    torch.zeros(1, 1, model.hidden_layer_size),
+                )
 
-    BATCH_SIZE: int = 50  # How many chunks to load at once
-    N_BATCHES: int = 4  # How many batches to load
-    NUM_EPOCHS: int = 100
-    HIDDEN_LAYER_SIZE: int = 100
-    INPUT_SIZE: int = 8
-    OUTPUT_SIZE: int = 4
+                y_pred = model(features)
+                single_loss = loss_function(y_pred, labels)
+                losses.append(single_loss.item())
 
-    # Create the model
-    model = QoEPredictor(INPUT_SIZE, HIDDEN_LAYER_SIZE, OUTPUT_SIZE)
-    loss_function = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+                single_loss.backward()
+                optimizer.step()
 
-    current_chunk: int = 1
-    current_epoch: int = 1
+            _loss = np.mean(losses)
+            # Add additional metrics to the progress bar
+            epochs.set_postfix(loss=_loss)
+
+    return losses
+
+
+def evaluate_model(model: nn.Module, sessions: List[tuple], loss_function: nn.Module):
+    """
+    Evaluate the model.
+    Args:
+        model (nn.Module): The model to evaluate.
+        sessions (List[tuple]): The list of sessions to evaluate on.
+    """
+    # Evaluate the model
 
     losses = []
-    for batch_number in range(N_BATCHES):
-        logger.debug(
-            f"Batch {batch_number:,}:\nLoading chunks {current_chunk:,} to {current_chunk + BATCH_SIZE:,}..."
-        )
-        df, num_chunks_loaded = load_chunks(current_chunk, BATCH_SIZE)
-        if df is None:
-            logger.info("No more chunks to load. Exiting...")
-            break
-
-        sessions = __preprocess(df)
-
-        logger.debug(f"Training model on {len(sessions):,} row(s)...")
-
-        current_batch_losses = []
-        # Train the model
-        with trange(NUM_EPOCHS, desc="Epochs", disable=False) as epochs:
-            for inner_epoch in epochs:
-                for features, labels in sessions:
-                    optimizer.zero_grad()
-                    model.hidden_cell = (
-                        torch.zeros(1, 1, model.hidden_layer_size),
-                        torch.zeros(1, 1, model.hidden_layer_size),
-                    )
-
-                    y_pred = model(features)
-                    single_loss = loss_function(y_pred, labels)
-                    current_batch_losses.append(single_loss.item())
-
-                    single_loss.backward()
-                    optimizer.step()
-
-                _loss = np.mean(current_batch_losses)
-                # Add additional metrics to the progress bar
-                epochs.set_postfix(loss=_loss)
-
-                current_epoch += 1
-
-        losses.append(np.mean(current_batch_losses))
-
-        current_chunk += num_chunks_loaded
-
-    # Evaluate the model
-    logger.debug("Evaluating model...")
-    df, num_chunks_loaded = load_chunks(75, 100)
-    sessions = __preprocess(df)
-    test_losses = []
-
     y_preds = []
     y_labels = []
-
     model.eval()
     with torch.no_grad():
         for features, labels in sessions:
@@ -228,27 +235,124 @@ if __name__ == "__main__":
                 torch.zeros(1, 1, model.hidden_layer_size),
             )
             y_test_pred = model(features)
-            test_loss = loss_function(y_test_pred, labels)
-            test_losses.append(test_loss.item())
-
-            y_preds.append(torch.argmax(y_test_pred, dim=1))
+            y_preds.append(y_test_pred)
             y_labels.append(labels)
+            test_loss = loss_function(y_test_pred, labels)
+            losses.append(test_loss.item())
 
-        # Classification report
-        y_preds = torch.cat(y_preds)
-        y_labels = torch.cat(y_labels)
-        print(classification_report(y_labels, y_preds))
+    logger.debug(f"Average loss: {np.mean(losses)}")
 
-        cm = confusion_matrix(y_labels, y_preds)
+    y_preds = torch.cat(y_preds)
+    y_labels = torch.cat(y_labels)
 
-        # Normalize the confusion matrix by dividing each row by its sum
-        cm_normalized = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
+    return y_preds, y_labels, losses
 
-        sns.heatmap(cm_normalized, annot=True, cmap="Blues", vmin=0, vmax=1)
-        plt.gca().invert_yaxis()
-        plt.xlabel("Predicted labels")
-        plt.ylabel("True labels")
-        plt.title("Confusion Matrix")
-        plt.show()
 
-    logger.debug(f"Average test loss: {np.mean(test_losses)}")
+def save(model: nn.Module, scaler, directory: str, suffix: str = ""):
+    """
+    Save the model.
+    Args:
+        model (nn.Module): The model to save.
+        directory (str): The directory to save the model to.
+    """
+    # Create a hash out of tunable parameters
+    if suffix != "":
+        suffix = "_" + suffix
+    torch.save(model.state_dict(), f"{directory}/model{suffix}.pt")
+    torch.save(scaler, f"{directory}/scaler{suffix}.pt")
+
+
+def load(model: nn.Module, directory: str, suffix: str = ""):
+    """
+    Load the model.
+    Args:
+        model (nn.Module): The model to load.
+        directory (str): The directory to load the model from.
+    """
+    model.load_state_dict(torch.load(f"{directory}/model{suffix}.pt"))
+    return torch.load(f"{directory}/scaler{suffix}.pt")
+
+
+if __name__ == "__main__":
+    logger = LoggerCustom.get_logger(level="DEBUG")
+
+    # Tunable parameters
+    LOAD: bool = False  # Whether to load the model or train a new one
+    BATCH_SIZE: int = 100  # How many chunks to load at once
+    N_BATCHES: int = 3  # How many batches to load
+    NUM_EPOCHS: int = 500
+    HIDDEN_LAYER_SIZE: int = 200
+    scaler = StandardScaler()  # Global scaler
+    scaler_fit = False
+    SUFFIX: str = ""  # Used to differentiate between models
+    MODEL_OUTPUT_DIRECTORY: str = "../out/model"
+    MODEL_PATH: str = f"{MODEL_OUTPUT_DIRECTORY}/model{SUFFIX}.pt"
+
+    INPUT_SIZE: int = 8
+    OUTPUT_SIZE: int = 4
+
+    # Create the model
+    model = QoEPredictor(INPUT_SIZE, HIDDEN_LAYER_SIZE, OUTPUT_SIZE)
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    current_chunk: int = 1
+    current_epoch: int = 1
+
+    if LOAD and os.path.exists(MODEL_PATH):
+        load(model, MODEL_PATH)
+        logger.info("Model loaded.")
+    else:
+        losses: List[float] = []
+        for batch_number in range(N_BATCHES):
+            logger.debug(
+                f"Batch {batch_number:,}:\nLoading chunks {current_chunk:,} to {current_chunk + BATCH_SIZE:,}..."
+            )
+
+            df, num_chunks_loaded = load_chunks(current_chunk, BATCH_SIZE)
+
+            if df is None:
+                logger.info("No more chunks to load. Exiting...")
+                break
+
+            sessions, columns = preprocess(df, scaler)
+            n_rows = sum([len(session[0]) for session in sessions])
+
+            logger.debug(f"Training model on {n_rows:,} row(s)...")
+
+            # Train the model
+            batch_losses: List[float] = train_model(
+                model, loss_function, optimizer, sessions, NUM_EPOCHS
+            )
+
+            # Track average batch loss
+            losses.append(np.mean(batch_losses))
+
+            # TODO: Remove this
+            # current_batch_losses = []
+            # # Train the model
+            # with trange(NUM_EPOCHS, desc="Epochs", disable=False) as epochs:
+            #     for inner_epoch in epochs:
+            #         for features, labels in sessions:
+            #             optimizer.zero_grad()
+            #             model.hidden_cell = (
+            #                 torch.zeros(1, 1, model.hidden_layer_size),
+            #                 torch.zeros(1, 1, model.hidden_layer_size),
+            #             )
+            #
+            #             y_pred = model(features)
+            #             single_loss = loss_function(y_pred, labels)
+            #             current_batch_losses.append(single_loss.item())
+            #
+            #             single_loss.backward()
+            #             optimizer.step()
+            #
+            #         _loss = np.mean(current_batch_losses)
+            #         # Add additional metrics to the progress bar
+            #         epochs.set_postfix(loss=_loss)
+            #
+            #         current_epoch += 1
+            #
+            # losses.append(np.mean(current_batch_losses))
+
+            current_chunk += num_chunks_loaded

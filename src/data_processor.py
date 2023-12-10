@@ -68,7 +68,6 @@ class DataProcessor:
                 try:
                     # If invalid filename, this will throw an exception
                     current_df: pd.DataFrame = PcapFile(root, file).read_pcap_file()
-                    logger.debug(f"Read file: {file}")
                     if chunk_df is None:
                         chunk_df = current_df
                     else:

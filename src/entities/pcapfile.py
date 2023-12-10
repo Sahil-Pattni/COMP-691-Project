@@ -65,7 +65,7 @@ class PcapFile:
         Read the pcap file and return a list of dictionaries containing the packets' data.
 
         Args:
-            file_path (str): The path to the pcap file.
+            file_path (str): The directory to the pcap file.
 
         Returns:
             List[dict]: A list of dictionaries containing the packets' data.
