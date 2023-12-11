@@ -1,7 +1,7 @@
 # %%
 
 """
-A class that represents a Puffer session, including 
+A class that represents a Puffer sessions, including
 both client-side and server-side data.
 
 Author: Sahil Pattni
@@ -24,13 +24,13 @@ logger = LoggerCustom.get_logger()
 
 class PufferData:
     """
-    A class that represents a Puffer session, including
+    A class that represents a Puffer sessions, including
     both client-side and server-side data.
 
     The following fields are across the DataFrames:
         time: Timestamp (nanoseconds since Unix epoch) when the chunk is sent.
-        session_id: Unique ID for the video session.
-        index: Index field used to group streams within the same session.
+        session_id: Unique ID for the video sessions.
+        index: Index field used to group streams within the same sessions.
         expt_id: Unique ID identifying information associated with a 'scheme'.
         channel: TV channel name, indicating a different stream for the same session_id.
         video_ts: Presentation timestamp of the chunk.
@@ -97,10 +97,10 @@ class PufferData:
 
     def __init__(self, directory: str, chunk_size: int):
         """
-        Initialize a Puffer session.
+        Initialize a Puffer sessions.
 
         Args:
-            directory (str, optional): Directory to load Puffer session
+            directory (str, optional): Directory to load Puffer sessions
             data from.
             chunk_size (int, optional): Number of rows to load at a time. Defaults to 100.
         """
@@ -111,13 +111,13 @@ class PufferData:
     # ----- PUBLIC METHODS ----- #
     def load_next_chunk(self) -> None:  # type: ignore
         """
-        Load a Puffer session dataset from a CSV file.
+        Load a Puffer sessions dataset from a CSV file.
 
         Args:
             limit (int, optional): Limit the number of rows to load. Defaults to None.
 
         Returns:
-            pd.DataFrame: Pandas DataFrame containing Puffer session data.
+            pd.DataFrame: Pandas DataFrame containing Puffer sessions data.
 
         Raises:
             StopIteration: If there are no more chunks to load.

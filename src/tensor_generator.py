@@ -76,7 +76,7 @@ def preprocess(df: pd.DataFrame):
     df.sort_values(by="time", inplace=True)
     # train_df.reset_index(drop=True, inplace=True)
 
-    # Derive session-level features
+    # Derive sessions-level features
     df["inter_arrival_time"] = (
         df.groupby("session_uid")["time"].diff().dt.total_seconds()
     )
@@ -89,7 +89,7 @@ def preprocess(df: pd.DataFrame):
             "packet_size": "sum",  # Total payload size of packets in this second
             "payload_size": "sum",  # Total payload size of packets in this second
             "inter_arrival_time": "mean",  # Mean inter-arrival time of packets in this second
-            # All other column values are the same for a given session
+            # All other column values are the same for a given sessions
             "dst_port": "first",
             "src_port": "first",
             "proto": "first",
@@ -152,7 +152,7 @@ def export_sessions(df: pd.DataFrame, prefix: str):
             )
         )
 
-        # Export the session tensor
+        # Export the sessions tensor
         fp = os.path.join("../out/sessions", f"{prefix}_session_{name}.pt")
         torch.save(
             (
@@ -162,6 +162,10 @@ def export_sessions(df: pd.DataFrame, prefix: str):
             fp,
         )
         logger.info(f"Saved session tensor to `{fp}`")
+
+    # Export columns
+    fp = os.path.join("../out/sessions", f"columns.pt")
+    torch.save(columns, fp)
 
 
 if __name__ == "__main__":

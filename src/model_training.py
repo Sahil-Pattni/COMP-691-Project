@@ -32,8 +32,8 @@ def load_session(
     """
     Load the data.
     Args:
-        idx (int): The index of the session to load.
-        output_directory (str): The directory containing the session.
+        idx (int): The index of the sessions to load.
+        output_directory (str): The directory containing the sessions.
 
     Returns:
         Tuple of (features, labels)
@@ -52,7 +52,7 @@ def train_model(
     model: nn.Module,
     loss_function: nn.Module,
     optimizer: torch.optim.Optimizer,
-    session,
+    sessions,
     num_epochs: int,
 ) -> List[float]:
     """
@@ -61,14 +61,14 @@ def train_model(
         model (nn.Module): The model to train.
         loss_function (nn.Module): The loss function.
         optimizer (torch.optim.Optimizer): The optimizer.
-        session: The list of session to train on.
+        sessions: The list of sessions to train on.
         num_epochs (int): The number of epochs to train for.
     """
     with trange(num_epochs, desc="Epochs", disable=False) as epochs:
         epoch_losses = []
         for _ in epochs:
             losses = []
-            for features, labels in session:
+            for features, labels in sessions:
                 optimizer.zero_grad()
                 model.hidden_cell = (
                     torch.zeros(1, 1, model.hidden_layer_size),
@@ -93,40 +93,7 @@ def train_model(
     return epoch_losses
 
 
-def evaluate(model: nn.Module, session, loss_function: nn.Module):
-    """
-    Evaluate the model.
-    Args:
-        model (nn.Module): The model to evaluate.
-        session (List[tuple]): The list of session to evaluate on.
-    """
-    # Evaluate the model
-
-    losses = []
-    y_preds = []
-    y_labels = []
-    model.eval()
-    with torch.no_grad():
-        for features, labels in session:
-            model.hidden = (
-                torch.zeros(1, 1, model.hidden_layer_size),
-                torch.zeros(1, 1, model.hidden_layer_size),
-            )
-            y_test_pred = model(features)
-            y_preds.append(y_test_pred)
-            y_labels.append(labels)
-            test_loss = loss_function(y_test_pred, labels)
-            losses.append(test_loss.item())
-
-    logger.debug(f"Average loss: {np.mean(losses)}")
-
-    y_preds = torch.cat(y_preds)
-    y_labels = torch.cat(y_labels)
-
-    return y_preds, y_labels, losses
-
-
-def save(model: nn.Module, scaler, directory: str, suffix: str = ""):
+def save(model: nn.Module, directory: str, suffix: str = ""):
     """
     Save the model.
     Args:
@@ -137,7 +104,6 @@ def save(model: nn.Module, scaler, directory: str, suffix: str = ""):
     if suffix != "":
         suffix = "_" + suffix
     torch.save(model.state_dict(), f"{directory}/model{suffix}.pt")
-    torch.save(scaler, f"{directory}/scaler{suffix}.pt")
 
 
 def load(model: nn.Module, directory: str, suffix: str = ""):
@@ -148,7 +114,6 @@ def load(model: nn.Module, directory: str, suffix: str = ""):
         directory (str): The directory to load the model from.
     """
     model.load_state_dict(torch.load(f"{directory}/model{suffix}.pt"))
-    return torch.load(f"{directory}/scaler{suffix}.pt")
 
 
 if __name__ == "__main__":
@@ -156,10 +121,8 @@ if __name__ == "__main__":
 
     # Tunable parameters
     LOAD: bool = False  # Whether to load the model or train a new one
-    NUM_EPOCHS: int = 300
-    HIDDEN_LAYER_SIZE: int = 300
-    scaler = StandardScaler()  # Global scaler
-    scaler_fit = False
+    NUM_EPOCHS: int = 100
+    HIDDEN_LAYER_SIZE: int = 100
     SUFFIX: str = ""  # Used to differentiate between models
     MODEL_OUTPUT_DIRECTORY: str = "../out/model"
     MODEL_PATH: str = f"{MODEL_OUTPUT_DIRECTORY}/model{SUFFIX}.pt"
@@ -170,10 +133,7 @@ if __name__ == "__main__":
     # Create the model
     model = QoEPredictor(INPUT_SIZE, HIDDEN_LAYER_SIZE, OUTPUT_SIZE)
     loss_function = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    current_chunk: int = 1
-    current_epoch: int = 1
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
     if LOAD and os.path.exists(MODEL_PATH):
         load(model, MODEL_PATH)
@@ -190,4 +150,4 @@ if __name__ == "__main__":
         logger.info(f"Model trained. Final loss: {epoch_losses[-1]}")
 
         # Save the model
-        save(model, scaler, MODEL_OUTPUT_DIRECTORY, suffix=SUFFIX)
+        save(model, MODEL_OUTPUT_DIRECTORY, suffix=SUFFIX)

@@ -32,7 +32,7 @@ from QoEGuesser import QoEPredictor
 # train_df.sort_values(by="time", inplace=True)
 # train_df.reset_index(drop=True, inplace=True)
 #
-# # Group by 'session_uid' to derive session-level features
+# # Group by 'session_uid' to derive sessions-level features
 # train_df["inter_arrival_time"] = train_df.groupby("session_uid")["time"].diff().dt.total_seconds()
 # train_df.dropna(inplace=True)
 #
@@ -46,7 +46,7 @@ from QoEGuesser import QoEPredictor
 #         "size": "sum",  # Total size of packets in this second
 #         "payload_size": "sum",  # Total payload size of packets in this second
 #         "inter_arrival_time": "mean",  # Mean inter-arrival time of packets in this second
-#         # All other column values are the same for a given session
+#         # All other column values are the same for a given sessions
 #         "jitter": "first",
 #         "src": "first",
 #         "dst": "first",
