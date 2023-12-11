@@ -19,28 +19,28 @@ from QoEGuesser import QoEPredictor
 
 #
 # # Load the data
-# df = None
+# train_df = None
 # window_size = 100
 #
 # for i in range(1, window_size + 1):
 #     logger.debug(f"Loading chunk {i}...")
-#     if df is None:
-#         df = pd.read_feather(f"out/chunk_{i+1}.ftr")
+#     if train_df is None:
+#         train_df = pd.read_feather(f"out/chunk_{i+1}.ftr")
 #     else:
-#         df = pd.concat([df, pd.read_feather(f"out/chunk_{i+1}.ftr")])
+#         train_df = pd.concat([train_df, pd.read_feather(f"out/chunk_{i+1}.ftr")])
 #
-# df.sort_values(by="time", inplace=True)
-# df.reset_index(drop=True, inplace=True)
+# train_df.sort_values(by="time", inplace=True)
+# train_df.reset_index(drop=True, inplace=True)
 #
 # # Group by 'session_uid' to derive session-level features
-# df["inter_arrival_time"] = df.groupby("session_uid")["time"].diff().dt.total_seconds()
-# df.dropna(inplace=True)
+# train_df["inter_arrival_time"] = train_df.groupby("session_uid")["time"].diff().dt.total_seconds()
+# train_df.dropna(inplace=True)
 #
-# jitter_per_session = df.groupby("session_uid")["inter_arrival_time"].std()
-# df["jitter"] = df["session_uid"].map(jitter_per_session)
-# df.reset_index(drop=True, inplace=True)
+# jitter_per_session = train_df.groupby("session_uid")["inter_arrival_time"].std()
+# train_df["jitter"] = train_df["session_uid"].map(jitter_per_session)
+# train_df.reset_index(drop=True, inplace=True)
 #
-# df = df.groupby(["session_uid", pd.Grouper(key="time", freq="1S")]).agg(
+# train_df = train_df.groupby(["session_uid", pd.Grouper(key="time", freq="1S")]).agg(
 #     {
 #         # Summed to be more useful later
 #         "size": "sum",  # Total size of packets in this second
@@ -61,27 +61,27 @@ from QoEGuesser import QoEPredictor
 # )
 #
 # # Calculate the bitrate in bits per second
-# df["size"] = df["size"] * 8 / 60
-# df.rename(columns={"size": "bitrate"}, inplace=True)
-# df.reset_index(
+# train_df["size"] = train_df["size"] * 8 / 60
+# train_df.rename(columns={"size": "bitrate"}, inplace=True)
+# train_df.reset_index(
 #     inplace=True
 # )  # Reset the index so that 'session_uid' and 'time' are columns again
 #
 # # One-Hot-Encode the categorical variables (provider)
-# provider_dummies = pd.get_dummies(df["provider"], prefix="provider")
-# df = pd.concat([df, provider_dummies], axis=1)
-# df.sort_values(by=["session_uid", "time"])
-# df.drop(columns=["time", "provider", "src", "dst"], inplace=True)
+# provider_dummies = pd.get_dummies(train_df["provider"], prefix="provider")
+# train_df = pd.concat([train_df, provider_dummies], axis=1)
+# train_df.sort_values(by=["session_uid", "time"])
+# train_df.drop(columns=["time", "provider", "src", "dst"], inplace=True)
 #
 # # Frequency encode session_uid
-# session_uid_counts = df["session_uid"].value_counts()
-# df["session_uid"] = df["session_uid"].map(session_uid_counts)
+# session_uid_counts = train_df["session_uid"].value_counts()
+# train_df["session_uid"] = train_df["session_uid"].map(session_uid_counts)
 #
-# df.dropna(inplace=True)
+# train_df.dropna(inplace=True)
 #
 # logger.debug("Completed preprocessing.")
 #
-# X, y = df.drop(columns=["bitrate", "jitter"]), df["bitrate"]
+# X, y = train_df.drop(columns=["bitrate", "jitter"]), train_df["bitrate"]
 #
 # X_train, X_test, y_train, y_test = train_test_split(X, y)
 # # Convert the data to DataLoader objects

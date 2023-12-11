@@ -87,12 +87,12 @@ class PcapFile:
                         if comm_protocol
                         else None,
                         "proto": packet[IP].proto,
-                        "size": packet[IP].len,
+                        "packet_size": packet[IP].len,
+                        "payload_size": len(packet.payload),
                         "time": packet[IP].time,
                         "provider": hash(self.__domain_name),
                         "tcp": 1 if TCP in packet else 0,
                         "udp": 1 if UDP in packet else 0,
-                        "payload_size": len(packet.payload),
                         "fragmentation": packet.frag if packet.payload else 0,
                     }
                 )

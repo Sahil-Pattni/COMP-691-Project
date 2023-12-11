@@ -83,13 +83,13 @@ class PufferData:
 
             # -- Step (Deprecated) : One hot encode the columns -- #
             # This is now hashed instead.
-            # self.__one_hot_encode(df)
+            # self.__one_hot_encode(train_df)
 
             # -- Step : Hash the session_id column -- #
             self.__hash(df)
 
             # -- Step (Deprecated) : Resample the DataFrame into 1S intervals -- #
-            # df = df.resample(on="time_ns_gmt", rule="1S").mean().dropna()
+            # train_df = train_df.resample(on="time_ns_gmt", rule="1S").mean().dropna()
 
             return df.dropna()
 
@@ -100,7 +100,7 @@ class PufferData:
         Initialize a Puffer session.
 
         Args:
-            directory (str, optional): Directory to load Puffer sessions
+            directory (str, optional): Directory to load Puffer session
             data from.
             chunk_size (int, optional): Number of rows to load at a time. Defaults to 100.
         """
@@ -111,13 +111,13 @@ class PufferData:
     # ----- PUBLIC METHODS ----- #
     def load_next_chunk(self) -> None:  # type: ignore
         """
-        Load a Puffer sessions dataset from a CSV file.
+        Load a Puffer session dataset from a CSV file.
 
         Args:
             limit (int, optional): Limit the number of rows to load. Defaults to None.
 
         Returns:
-            pd.DataFrame: Pandas DataFrame containing Puffer sessions data.
+            pd.DataFrame: Pandas DataFrame containing Puffer session data.
 
         Raises:
             StopIteration: If there are no more chunks to load.
